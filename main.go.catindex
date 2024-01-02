@@ -1,0 +1,50 @@
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+
+	"github.com/opensearch-project/opensearch-go"
+	"github.com/opensearch-project/opensearch-go/opensearchapi"
+)
+
+func main() {
+
+	client, _ := opensearch.NewClient(opensearch.Config{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		Addresses: []string{"https://192.168.1.49:9200"},
+		Username:  "admin", // For testing only. Don't store credentials in code.
+		Password:  "admin",
+	})
+
+	catIndex := opensearchapi.CatIndicesRequest{
+		Pretty:          true,
+		Format:          "json",
+		ExpandWildcards: "open",
+	}
+	catRes, _ := catIndex.Do(context.Background(), client)
+	fmt.Println(catRes.String())
+	catResByte, _ := io.ReadAll(catRes.Body)
+
+	type custom2 struct {
+		DocsCount string `json:"docs.count"`
+		Index     string `json:"index"`
+	}
+	type custom1 []custom2
+	var data custom1
+	err := json.Unmarshal(catResByte, &data)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	for i, j := range data {
+		fmt.Println(i, j.Index, j.DocsCount)
+	}
+}

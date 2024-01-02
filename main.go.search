@@ -1,0 +1,108 @@
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+
+	"github.com/opensearch-project/opensearch-go"
+	"github.com/opensearch-project/opensearch-go/opensearchapi"
+)
+
+type Total struct {
+	Value    int    `json:"total.value"`
+	Relation string `json:"total.relation"`
+}
+type BackendResponse struct {
+	Took     int    `json:"took"`
+	TimedOut bool   `json:"timed_out"`
+	Shards   Shards `json:"_shards"`
+	Hits     Hits   `json:"hits"`
+}
+
+type Hits struct {
+	Hitss []Hitss `json:"hits"`
+}
+type Hitss struct {
+	Fields Fields `json:"fields"`
+}
+
+type Fields struct {
+	IP []string `json:"ip"`
+}
+
+type Shards struct {
+	Successful int `json:"successful"`
+}
+
+func main() {
+
+	client, _ := opensearch.NewClient(opensearch.Config{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		Addresses: []string{"https://192.168.1.49:9200"},
+		Username:  "admin", // For testing only. Don't store credentials in code.
+		Password:  "admin",
+	})
+
+	from := 0
+	size := 2
+
+	content := strings.NewReader(`{
+		"query" : {
+			"match": {
+				"ip": "223.87.60.27"
+			}
+		},
+		"fields": [
+			"ip"
+		],
+		"_source":false
+	}`)
+
+	searchReq := opensearchapi.SearchRequest{
+		Index:  []string{"opensearch_dashboards_sample_data_logs"},
+		From:   &from,
+		Size:   &size,
+		Pretty: true,
+		Body:   content,
+	}
+
+	searchRes, _ := searchReq.Do(context.Background(), client)
+	fmt.Println(searchRes.String())
+	fmt.Println("###################")
+
+	respBytes, _ := io.ReadAll(searchRes.Body)
+	//fmt.Print("After: " + string(respBytes))
+
+	var data BackendResponse
+	err := json.Unmarshal(respBytes, &data)
+	if err != nil {
+		log.Println(err)
+	}
+
+	fmt.Println()
+	for _, j := range data.Hits.Hitss {
+		fmt.Println(j)
+	}
+	//fmt.Println([]byte(searchRes.String()))
+
+	// jsonBytes, err := json.Marshal(searchRes)
+	// if err != nil {
+	// 	fmt.Println("Error converting to JSON:", err)
+	// 	return
+	// }
+	//  var data Hits
+	// err = json.Unmarshal(jsonBytes, &data)
+	// if err != nil {
+	// 	fmt.Println("Error unmarshalling JSON:", err)
+	// 	return
+	// }
+	// fmt.Println(data)
+}
